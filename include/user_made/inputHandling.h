@@ -76,6 +76,8 @@ extern int currentIDNumber;
 
 extern float fov;
 
+extern std::vector<char> currentKeysPressed;
+
 extern glm::mat4 proj;
 extern glm::mat4 view;
 extern glm::mat4 model;
@@ -87,6 +89,9 @@ extern std::vector<object> objects;
 extern unsigned int textureColorbuffer;
 extern unsigned int framebuffer;
 extern unsigned int rbo;
+extern unsigned int textureColorbuffer2;
+extern unsigned int framebuffer2;
+extern unsigned int rbo2;
 extern unsigned int gBuffer;
 extern unsigned int gPosition, gNormal, gAlbedo;
 extern unsigned int grbo;
@@ -103,6 +108,8 @@ extern glm::vec3 up;
 extern glm::vec3 cameraRight;
 extern glm::vec3 cameraUp;
 extern glm::vec3 cameraFront;
+
+// This whole file is extremely wacky and needs to be completely redone because of all the slop in it
 
 void key_callback(GLFWwindow *window, int key, int scancode, int action, int mods)
 {
@@ -207,6 +214,29 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
         std::cout << error("ERROR: FRAMEBUFFER is not complete!") << std::endl;
     }
 
+    glGenFramebuffers(1, &framebuffer2);
+    glBindFramebuffer(GL_FRAMEBUFFER, framebuffer2);
+    
+    glGenTextures(1, &textureColorbuffer2);
+    glBindTexture(GL_TEXTURE_2D, textureColorbuffer2);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, textureColorbuffer2, 0);
+
+    glGenRenderbuffers(1, &rbo2);
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo2);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, rbo2);
+
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cerr << error("ERROR: FRAMEBUFFER (FULLSCREEN SHADER) is not complete!") << std::endl;
+    }
+
     glGenFramebuffers(1, &gBuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
 
@@ -263,6 +293,17 @@ void processInput(GLFWwindow *window) // This is perfect frame input for things 
         return;
     }
 
+    // LUA
+    for (int i = GLFW_KEY_A; i <= GLFW_KEY_Z; i++)
+    {
+        if (glfwGetKey(window, i) == GLFW_PRESS)
+        {
+            //std::cout << static_cast<char>(i) << std::endl;
+            currentKeysPressed.push_back(i);
+        }
+    }
+
+
     if (!levelEditing)
     {
         if (!grounded)
@@ -305,7 +346,7 @@ void processInput(GLFWwindow *window) // This is perfect frame input for things 
     }
     else
     {
-        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) // Duplicate
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS && glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) // Duplicate (I don't think this even works)
         {
             if (duplicateCooldown == false)
             {
@@ -315,7 +356,7 @@ void processInput(GLFWwindow *window) // This is perfect frame input for things 
                 {
                     if (objects[i].selected == true)
                     {
-                        addObject(currentIDNumber, objects[i].name, cubeObj, objects[i].objectType);
+                        object(objects[i].name, cubeObj, objects[i].objectType);
                         objects.back().transform = objects[i].transform;
                         if (objects[i].objectType == LIGHT)
                         {
@@ -515,7 +556,7 @@ void processInput(GLFWwindow *window) // This is perfect frame input for things 
                 {
                     if (objects[i].selected == true)
                     {
-                        addObject(currentIDNumber, objects[i].name, cubeObj, objects[i].objectType);
+                        object(objects[i].name, cubeObj, objects[i].objectType);
                         objects.back().transform = objects[i].transform;
                         if (objects[i].objectType == LIGHT)
                         {
@@ -546,7 +587,7 @@ void processInput(GLFWwindow *window) // This is perfect frame input for things 
             {
                 if (objects[i].selected == true)
                 {
-                    addObject(currentIDNumber, objects[i].name, cubeObj, objects[i].objectType);
+                    object(objects[i].name, cubeObj, objects[i].objectType);
                     objects.back().transform = objects[i].transform;
                     if (objects[i].objectType == LIGHT)
                     {
@@ -660,13 +701,13 @@ void mouse_button_callback(GLFWwindow *window, int button, int action, int mods)
                 std::cout << "Hit!\n";
                 if (levelEditing || gui_visible)
                 {
-                    int select_hit_id = select_ray.hit.id;
+                    int select_hit_id = objects[select_ray.hit].id;
                     for (int i = 0; i < objects.size(); i++)
                     {
 
                         if (objects[i].id == select_hit_id)
                         {
-                            std::cout << select_ray.hit.name << std::endl;
+                            std::cout << objects[select_ray.hit].name << std::endl;
                             objects[i].selected = true;
                         }
                         else

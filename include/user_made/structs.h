@@ -17,12 +17,13 @@ struct player // Add other things later such as health and more
     int weaponID = 0;
 };
 
-
 struct gui
 {
     int id; // The same as the object its representing
     bool visible;
 };
+
+extern std::vector<gui> guisVisible;
 
 struct vertices
 {
@@ -45,10 +46,11 @@ std::vector<texture> textureArray;
 enum objectTypes
 {
     REGULAR, // A regular object such as a wall or a floor
-    STATIC, // A static object that is not destroyed/replaced upon load
-    LIGHT // A light
+    STATIC,  // A static object that is not destroyed/replaced upon load
+    LIGHT    // A light
 };
 
+/*
 struct object
 {
     int id;
@@ -74,14 +76,192 @@ struct object
     unsigned int VAO;
     unsigned int VBO;
 };
+*/
 
-std::vector<object> objects;
+struct light // This truly is an ECS
+{
+    glm::vec3 pos;
+    glm::vec3 color;
+    int id; // The same as the object its representing
+    bool enabled = true;
+    bool selected = false;
+    float strength = 1.0f;
 
+    // Shadows
+    bool castShadow = true;
+    int shadowID;
+};
+
+struct transform
+{
+    glm::vec3 pos = glm::vec3(0.0f, 0.0f, 0.0f);
+    glm::vec3 rot = glm::vec3(0.0f, 0.0f, 0.0f);
+    glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
+};
+
+std::vector<light> lightArray;
+
+class object; // Stupid compiler can't work this out on its own
+extern std::vector<object> objects;
+
+extern int currentIDNumber;
+extern int currentLightID;
+
+class object
+{
+public:
+    int id;
+    std::string name;
+    vertices vertexData;
+    transform transform;
+    enum objectTypes objectType;
+    glm::vec3 objectColor = glm::vec3(1.0f, 1.0f, 1.0f);
+    unsigned int shader;
+    std::string texture_name;
+    float reflectance = 0.0f;
+    bool enabled = true; // Not very efficient way of cleaning things up but we won't be deleting too many objects dynamically
+    bool visible = true; // Make the object completely visible or invisible (rendered / not rendered)
+    bool selected = false;
+    bool canCollide = true;
+    bool dynamic = false;
+    std::vector<float> temp_data; // Used for OpenGL to correctly parse my custom way of saving objects
+    unsigned int VAO;
+    unsigned int VBO;
+
+    object(std::string nameGiven, vertices vertexDataGiven, enum objectTypes objectTypeGiven)
+    {
+        id = currentIDNumber;
+        name = nameGiven;
+        vertexData = vertexDataGiven;
+        transform.pos = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform.rot = glm::vec3(0.0f, 0.0f, 0.0f);
+        transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
+        objectType = objectTypeGiven;
+        texture_name = "placeholder";
+
+        glUseProgram(9);
+
+        unsigned int tempVAO, tempVBO;
+        glGenVertexArrays(1, &tempVAO);
+        glGenBuffers(1, &tempVBO);
+
+        glBindVertexArray(tempVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, tempVBO);
+
+        VAO = tempVAO;
+        VBO = tempVBO;
+
+        std::cout << "Creating object: " << nameGiven << std::endl;
+        std::cout << "Internal VAO: " << tempVAO << std::endl;
+        std::cout << "Internal VBO: " << tempVBO << std::endl;
+
+        // Add at beginning of constructor
+        GLint activeTexture, currentProgram, boundVAO;
+        glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
+        glUseProgram(9);
+        glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
+        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &boundVAO);
+
+        std::cout << "GL State when creating: " << nameGiven 
+                << " - ActiveTexture: " << activeTexture
+                << " - CurrentProgram: " << currentProgram 
+                << " - BoundVAO: " << boundVAO << std::endl;
+
+        std::vector<float> tempTempData = convertGLMToOpenGLFLoat(vertexDataGiven); // Seems correct
+
+        temp_data = tempTempData;
+
+        glBufferData(GL_ARRAY_BUFFER, temp_data.size() * sizeof(float), temp_data.data(), GL_STATIC_DRAW);
+        int vertexsize = 8; // I hate doing this manually
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexsize * sizeof(float), (void *)0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, vertexsize * sizeof(float), (void *)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vertexsize * sizeof(float), (void *)(5 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+
+        if (objectType == LIGHT)
+        {
+            struct light newLight;
+            newLight.pos = transform.pos;
+            newLight.id = currentIDNumber;
+            newLight.color = glm::vec3(1.0f, 1.0f, 1.0f);
+
+            lightArray.push_back(newLight);
+            currentLightID += 1;
+        }
+
+        for (int i = 0; i < guisVisible.size(); i++)
+        {
+            guisVisible[i].visible = false;
+        }
+
+        gui newGui;
+        newGui.id = currentIDNumber;
+        newGui.visible = false;
+        guisVisible.push_back(newGui);
+
+        currentIDNumber++;
+
+        objects.push_back(*this);
+    }
+
+    void remove()
+    {
+        enabled = false;
+        for (int i = 0; i < lightArray.size(); i++)
+        {
+            if (lightArray[i].id == id)
+            {
+                lightArray[i].enabled = false;
+            }
+        }
+    }
+
+    void updateVertices(vertices new_vertices)
+    {
+        std::vector<float> tempTempData = convertGLMToOpenGLFLoat(new_vertices);
+
+        glBindBuffer(GL_ARRAY_BUFFER, this->VBO);
+        glBufferData(GL_ARRAY_BUFFER, tempTempData.size() * sizeof(float), tempTempData.data(), GL_STATIC_DRAW);
+    }
+
+    std::vector<float> convertGLMToOpenGLFLoat(vertices vertexDataGiven)
+    {
+        std::vector<float> tempTempData;
+
+        for (int v = 0; v < vertexDataGiven.position.size(); v++)
+        {
+            // Positions
+            tempTempData.push_back(vertexDataGiven.position[v].x);
+            tempTempData.push_back(vertexDataGiven.position[v].y);
+            tempTempData.push_back(vertexDataGiven.position[v].z);
+
+            // Texture Coordinates
+            tempTempData.push_back(vertexDataGiven.texCoords[v][0]);
+            tempTempData.push_back(vertexDataGiven.texCoords[v][1]);
+
+            // Normals
+            tempTempData.push_back(vertexDataGiven.normal[v][0]);
+            tempTempData.push_back(vertexDataGiven.normal[v][1]);
+            tempTempData.push_back(vertexDataGiven.normal[v][2]);
+        }
+
+        return tempTempData;
+    }
+};
+
+/*
 struct LuaObject
 {
     int id; // The same as the object its representing
     object *obj;
 };
+*/
 
 struct weapon // Later add ammo, and other customizations
 {
@@ -122,21 +302,5 @@ struct weapon // Later add ammo, and other customizations
 };
 
 std::vector<weapon> weapons;
-
-struct light // This truly is an ECS
-{
-    glm::vec3 pos;
-    glm::vec3 color;
-    int id; // The same as the object its representing
-    bool enabled = true;
-    bool selected = false;
-    float strength = 1.0f;
-
-    // Shadows
-    bool castShadow = true;
-    int shadowID;
-};
-
-std::vector<light> lightArray;
 
 #endif // STRUCTS_H

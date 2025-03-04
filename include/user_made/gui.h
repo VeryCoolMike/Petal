@@ -40,6 +40,8 @@ extern bool defferedLight;
 
 extern unsigned int textureColorbuffer2;
 
+extern float tempValue;
+
 
 void createGui(GLFWwindow *window)
 {
@@ -61,6 +63,7 @@ void renderGui(GLFWwindow *window, Shader regularShader)
 {
     if (gui_visible)
     {
+        
         firstMouse = true;
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
@@ -110,16 +113,16 @@ void renderGui(GLFWwindow *window, Shader regularShader)
             updateStaticShadows();
         }
 
+
+
         if (ImGui::Button("Make Cube"))
         {
-            addObject(currentIDNumber, "box", cubeObj, REGULAR);
-            objects[currentIDNumber - 1].texture_name = "placeholder";
+            object("box", cubeObj, REGULAR);
         }
 
         if (ImGui::Button("Make Light"))
         {
-            addObject(currentIDNumber, "light", cubeObj, LIGHT);
-            
+            object("light", cubeObj, LIGHT);
         }
 
         ImGui::InputFloat("Camera Speed", &real_camera_speed, 0.1f);
@@ -128,7 +131,7 @@ void renderGui(GLFWwindow *window, Shader regularShader)
         ImGui::ColorPicker4("Background Color", backgroundColor);
         ImGui::InputInt("Current Shader", &currentShader);
 
-        ImGui::Checkbox("Deffered lights", &defferedLight);
+        ImGui::InputFloat("Temp Value", &tempValue);
 
         ImGui::PlotLines("Frame time graph", frameTimes.data(), frameTimes.size(), 0, nullptr, 0.0f, *std::max_element(frameTimes.begin(), frameTimes.end()), ImVec2(200,100));
 
@@ -143,7 +146,22 @@ void renderGui(GLFWwindow *window, Shader regularShader)
         ImGui::Image((ImTextureID)(uint64_t)textureColorbuffer, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
         ImGui::Image((ImTextureID)(uint64_t)textureColorbuffer2, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
 
-        ImGui::InputInt("Current shadow texture", &shadowTexture);
+        for (int i = 0; i < getShadowAmount(); i++)
+        {
+            if (i % 3 == 0)
+            {
+                ImGui::NewLine();
+            }
+            else
+            {
+                ImGui::SameLine();
+            }
+            glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBOs[i]);
+            ImGui::Image((ImTextureID)(uint64_t)depthCubeMaps[i], ImVec2(bufferX/4, bufferY/4), ImVec2(0, 1), ImVec2(1, 0));
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);   
+        }
+
+    
         if (ImGui::Button("Refresh static shadows"))
         {
             updateStaticShadows();
@@ -217,6 +235,10 @@ void renderGui(GLFWwindow *window, Shader regularShader)
             if (guisVisible[i].visible)
             {
                 ImGui::Begin(objects[guisVisible[i].id].name.c_str()); // Start the ImGui window
+                ImGui::Text("ID: ");
+                ImGui::SameLine();
+                std::string idStr = std::to_string(objects[guisVisible[i].id].id);
+                ImGui::Text("%s", idStr.c_str());
                 for (int v = 0; v < fileCount; v++) // V is the texture
                 {
                     ImGui::PushID(v);
@@ -262,20 +284,20 @@ void renderGui(GLFWwindow *window, Shader regularShader)
                 if (ImGui::Button("Delete"))
                 {
                     // Remove the object at index n
-                    remove_object(guisVisible[i].id);
+                    objects[guisVisible[i].id].remove();
                 }
 
-                if (ImGui::Button("cube"))
+                if (ImGui::Button("cube")) // Remove these hard coded things soon (dynamic :money_mouth:)
                 {
-                    updateVertices(cubeObj, objects[guisVisible[i].id]);
+                    objects[guisVisible[i].id].updateVertices(cubeObj);
                 }
                 if (ImGui::Button("skull"))
                 {
-                    updateVertices(skull, objects[guisVisible[i].id]);
+                    objects[guisVisible[i].id].updateVertices(skull);
                 }
                 if (ImGui::Button("gun"))
                 {
-                    updateVertices(dbShotgun, objects[guisVisible[i].id]);
+                    objects[guisVisible[i].id].updateVertices(dbShotgun);
                 }
                 ImGui::End(); // End the ImGui window
             }

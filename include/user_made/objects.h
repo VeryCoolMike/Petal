@@ -58,87 +58,6 @@ std::vector<float> convertGLMToOpenGLFLoat(vertices vertices)
     return temp_data;
 }
 
-object addObject(int id, std::string name, vertices vertices, enum objectTypes objectType)
-{
-    object newObject;
-    newObject.id = currentIDNumber;
-    newObject.name = name;
-    newObject.vertices = vertices;
-    newObject.transform.pos = glm::vec3(0.0f, 0.0f, 0.0f);
-    newObject.transform.rot = glm::vec3(0.0f, 0.0f, 0.0f);
-    newObject.transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
-    newObject.objectType = objectType;
-    newObject.texture_name = "placeholder";
-
-
-    unsigned int VAO, VBO;
-    glGenVertexArrays(1, &VAO);
-    glGenBuffers(1, &VBO);
-
-    glBindVertexArray(VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-    newObject.VAO = VAO;
-    newObject.VBO = VBO;
-
-    std::vector<float> temp_data = convertGLMToOpenGLFLoat(vertices);
-
-    newObject.temp_data = temp_data;
-
-    glBufferData(GL_ARRAY_BUFFER, newObject.temp_data.size() * sizeof(float), newObject.temp_data.data(), GL_STATIC_DRAW);
-    int vertexsize = 8; // I hate doing this manually
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, vertexsize * sizeof(float), (void *)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, vertexsize * sizeof(float), (void *)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, vertexsize * sizeof(float), (void *)(5 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-
-    struct light newLight;
-    newLight.pos = newObject.transform.pos;
-    newLight.id = currentIDNumber;
-    newLight.color = glm::vec3(1.0f, 1.0f, 1.0f);
-
-    if (objectType == LIGHT)
-    {
-        lightArray.push_back(newLight);
-        currentLightID += 1;
-    }
-
-    for (int i = 0; i < guisVisible.size(); i++)
-    {
-        guisVisible[i].visible = false;
-    }
-
-    gui newGui;
-    newGui.id = currentIDNumber;
-    newGui.visible = false;
-    guisVisible.push_back(newGui);
-    std::cout << guisVisible.back().id << std::endl;
-
-    objects.push_back(newObject);
-    currentIDNumber += 1;
-
-    return newObject;
-}
-
-void remove_object(int id)
-{
-    // Who needs memory anyway?
-    objects[id].enabled = false;
-    for (int i = 0; i < lightArray.size(); i++)
-    {
-        if (lightArray[i].id == id)
-        {
-            lightArray[i].enabled = false;
-        }
-    }
-}
-
 object &get_object_by_name(const std::string &name)
 {
     // O(n) :skull:
@@ -184,7 +103,7 @@ void SaveToFile(const std::string &filename)
         outfile << obj.transform.scale.x << "\n"
                 << obj.transform.scale.y << "\n"
                 << obj.transform.scale.z << "\n"; // scales :(
-        outfile << obj.vertices.id << "\n";       // Object ID
+        outfile << obj.vertexData.id << "\n";       // Object ID
         // 1. ID
         // 2. Name
         // 3. objectType
@@ -536,7 +455,7 @@ int LoadFromFile(const std::string &filename) // Load a map from a text file
             try
             {
                 vertices loadedVertices = loadObj(text.c_str(), text.c_str());
-                addObject(tempID, tempName, loadedVertices, tempObjectType);
+                object(tempName, loadedVertices, tempObjectType);
                 objects.back().transform.pos = tempTransformPos;
                 objects.back().transform.scale = tempTransformScale;
                 objects.back().transform.rot = tempTransformRot;
@@ -560,22 +479,6 @@ int LoadFromFile(const std::string &filename) // Load a map from a text file
     infile.close();
 
     return lightCounter;
-}
-
-void updateVertices(vertices new_vertices, object object_used) // Future use for animations
-{
-    std::vector<float> temp_data = convertGLMToOpenGLFLoat(new_vertices);
-
-    for (int i = 0; i < objects.size(); i++)
-    {
-        if (objects[i].id == object_used.id)
-        {
-            objects[i].vertices.id = new_vertices.id;
-        }
-    }
-
-    glBindBuffer(GL_ARRAY_BUFFER, object_used.VBO);
-    glBufferData(GL_ARRAY_BUFFER, temp_data.size() * sizeof(float), temp_data.data(), GL_STATIC_DRAW);
 }
 
 void createWeapon(vertices vertices_used, std::string name, int texture)

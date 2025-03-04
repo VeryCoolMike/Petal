@@ -3,7 +3,8 @@
         {
             "name": "Linux",
             "includePath": [
-                "${workspaceFolder}/**"
+                "${workspaceFolder}/**",
+                "/include/sol2"  // Add Sol2's include path here
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",

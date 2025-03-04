@@ -15,6 +15,8 @@
 #include <future>
 #include <thread>
 #include <algorithm>
+#include <cassert>
+#include <omp.h>
 
 #include <glad/glad.h>
 
@@ -28,8 +30,7 @@
 #include "include/imgui/backends/imgui_impl_glfw.h"
 #include "include/imgui/backends/imgui_impl_opengl3.h"
 
-#include "include/lua/lua.hpp"
-#include "include/lua/lauxlib.h"
+#include "include/sol.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 
@@ -120,6 +121,8 @@ bool rayTracedShadows = false; // 👀 nah jk lol im never adding this raytracin
 
 std::vector<float> frameTimes;
 
+std::vector<char> currentKeysPressed;
+
 // Shaders
 Shader lightShader;
 Shader regularShader;
@@ -138,18 +141,20 @@ glm::vec3 cameraRight = glm::normalize(glm::cross(up, cameraDirection));
 glm::vec3 cameraUp = glm::cross(cameraDirection, cameraRight);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, 0.0f);
 
+std::vector<object> objects;
+
 /// @brief 
 /// @param  
 /// @return 
-int main(void) // NEXT UP: Figure out what the hell is going on with shadows, add Culling (probably render depth needed for SSAO anyway) and make SSAO (refer to learnopengl goober)
-{
+int main(void) // NEXT UP: Figured out what the hell is going on with shadows, static shadow allocation is intruding on dynamic shadow allocation
+{              // fixed, gpu cpu whatever blah blah and now need AZDO or something for faster speed and maybe make multiple LODs of objects in createObj for faster processing?
 
     printf("One must imagine sisyphus happy\n");
 
     // Setting up some boring config stuff
     glfwInit();
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // Create the window (width, height, name, monitor, ???)
@@ -288,14 +293,15 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
 
     // Get the camera pos, forward, up, and right (up and cameraUp are not the same, up is the vector that is up on the camera and cameraUp is the world's up)
 
-    addObject(currentIDNumber, "floor", cubeObj, REGULAR);
-    objects[currentIDNumber - 1].transform.pos = glm::vec3(0.0f, -5.0f, 0.0f);
-    objects[currentIDNumber - 1].transform.scale = glm::vec3(100.0f, 1.0f, 100.0f);
+    object("floor", cubeObj, REGULAR);
+    objects.back().transform.pos = glm::vec3(0.0f, -5.0f, 0.0f);
+    objects.back().transform.scale = glm::vec3(100.0f, 1.0f, 100.0f);
 
-    addObject(currentIDNumber, "box", cubeObj, REGULAR);
+    object("box", cubeObj, REGULAR);
 
-    addObject(currentIDNumber, "light", cubeObj, LIGHT);
-    objects[currentIDNumber - 1].transform.pos = glm::vec3(3.0f, 3.0f, 0.0f);
+    object("light", cubeObj, LIGHT);
+    objects.back().transform.pos = glm::vec3(3.0f, 3.0f, 0.0f);
+
 
     // Create the perspective projection
     glm::mat4 proj = glm::perspective(glm::radians(fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
@@ -303,7 +309,7 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
 
 
     // Blending for transparent textures
-    glEnable(GL_BLEND);  
+    glEnable(GL_BLEND);
 
     glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ZERO);
 
@@ -348,7 +354,7 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
         std::cerr << error("ERROR: FRAMEBUFFER (FULLSCREEN SHADER) is not complete!") << std::endl;
     }
 
-    glGenFramebuffers(1, &framebuffer2);
+    glGenFramebuffers(1, &framebuffer2); // Used for overlaying objects
     glBindFramebuffer(GL_FRAMEBUFFER, framebuffer2);
     
     glGenTextures(1, &textureColorbuffer2);
@@ -428,7 +434,7 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
         glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubeMaps[i]);
         for (int j = 0; j < 6; j++)
         {
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, GL_DEPTH_COMPONENT, SHADOW_RESOLUTION, SHADOW_RESOLUTION, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, GL_DEPTH_COMPONENT16, SHADOW_RESOLUTION, SHADOW_RESOLUTION, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
         }
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -455,7 +461,7 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
         glBindTexture(GL_TEXTURE_CUBE_MAP, depthDynamicCubeMaps[i]);
         for (int j = 0; j < 6; j++)
         {
-            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, GL_DEPTH_COMPONENT, SHADOW_RESOLUTION, SHADOW_RESOLUTION, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + j, 0, GL_DEPTH_COMPONENT16, SHADOW_RESOLUTION, SHADOW_RESOLUTION, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
         }
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
@@ -488,8 +494,13 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
         if (std::filesystem::is_regular_file(i))
         {
             std::cout << i.path().string() << std::endl;
+            /*
             std::thread luaThread(RunScript, i.path().string());
+
             luaThread.detach();
+            */
+
+            RunScript(i.path().string());
 
             scriptCount++;
         }
@@ -499,6 +510,8 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
 
     while (!glfwWindowShouldClose(window)) // !---!---! RENDER LOOP !---!---!
     {
+        currentKeysPressed.clear();
+
         glfwMakeContextCurrent(window);
 
         glfwPollEvents();
@@ -510,17 +523,12 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
         if (framesPerSecond >= 0.0)
         {
             lastFPS = framesPerSecond;
-            printf("%f\n", lastFPS);
+            //printf("%f\n", lastFPS);
         }
 
         currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-        frameTimes.push_back(deltaTime);
-        if (frameTimes.size() >= 100)
-        {
-            frameTimes.erase(frameTimes.begin());
-        }
+        lastFrame = currentFrame;   
 
         // Camera stuff
         // https://learnopengl.com/Getting-started/Camera Euler Angles
@@ -559,10 +567,9 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
             }
         }
 
-        if (frameCount % 3 == 0)
-        {
-            updateDynamicShadows();
-        }
+
+        updateDynamicShadows();
+
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         
@@ -581,13 +588,13 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
 
         glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
         glEnable(GL_DEPTH_TEST);
-        glClearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], backgroundColor[3]);
+        glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the buffers
         gBufferShader.use();
         renderGBuffer();
 
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-        glClearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], backgroundColor[3]);
+        glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the buffers
         regularShader.use();
         regularShader.setInt("screenX", currentWidth);
@@ -631,7 +638,18 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
         glEnable(GL_DEPTH_TEST);        
 
         // Render gui
+
         renderGui(window, regularShader);
+
+        frameTimes.push_back(deltaTime);
+
+        if (frameTimes.size() >= 100)
+        {
+            frameTimes.erase(frameTimes.begin());
+        }
+
+        //std::cout << 1000 / totalTime << std::endl;
+        
 
         glfwSwapBuffers(window); // Swap the buffers and poll the events :sunglasses:
     }
@@ -653,6 +671,9 @@ int main(void) // NEXT UP: Figure out what the hell is going on with shadows, ad
     glDeleteProgram(lightShader.ID);
     glDeleteProgram(regularShader.ID);
     glDeleteProgram(screenShader.ID);
+    glDeleteProgram(depthShader.ID);
+    glDeleteProgram(skyboxShader.ID);
+    glDeleteProgram(gBufferShader.ID);
     ImGui_ImplOpenGL3_Shutdown();
     ImGui_ImplGlfw_Shutdown();
 

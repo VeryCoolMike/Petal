@@ -95,11 +95,14 @@ extern glm::vec3 cameraRight;
 extern glm::vec3 cameraUp;
 extern glm::vec3 cameraFront;
 
+extern std::vector<object> objects;
+
+float tempValue;
+
 int getShadowAmount();
 
 void render()
 {
-
     glActiveTexture(GL_TEXTURE5);
     glBindTexture(GL_TEXTURE_2D, gPosition);
     glActiveTexture(GL_TEXTURE6);
@@ -114,27 +117,26 @@ void render()
     regularShader.setInt("gAlbedo", 7);
     regularShader.setInt("gDepth", 8);
 
-    proj = glm::perspective(glm::radians(fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+    proj = glm::perspective(glm::radians(fov), (float)currentWidth / (float)currentHeight, 0.1f, 1000.0f);
 
-    lightShader.use();
-    lightShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
     regularShader.use();
     regularShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
-    
-    regularShader.use();
+    regularShader.setMatrix4fv("projection", 1, GL_FALSE, glm::value_ptr(proj));
+
+    regularShader.setFloat("tempValue", tempValue);
 
     for (int i = 0; i < lightArray.size(); i++) // Ah yes, peak, run a for loop every single frame multiple times, truly the pythonic way.
     {
         lightArray[i].pos = objects[lightArray[i].id].transform.pos;
         std::string uniformName = "pointLights[" + std::to_string(i) + "]";
-        regularShader.setFloat3(uniformName + ".position", lightArray[i].pos.x, lightArray[i].pos.y, lightArray[i].pos.z);
-        regularShader.setBool(uniformName + ".enabled", lightArray[i].enabled);
-        regularShader.setFloat3(uniformName + ".color", lightArray[i].color[0], lightArray[i].color[1], lightArray[i].color[2]); // For some reason red
-        regularShader.setFloat(uniformName + ".strength", lightArray[i].strength);
         regularShader.setFloat(uniformName + ".castShadow", lightArray[i].castShadow);
         if (lightArray[i].castShadow == true)
         {
             regularShader.setInt(uniformName + ".shadowID", lightArray[i].shadowID);
+            regularShader.setFloat3(uniformName + ".position", lightArray[i].pos.x, lightArray[i].pos.y, lightArray[i].pos.z);
+            regularShader.setBool(uniformName + ".enabled", lightArray[i].enabled);
+            regularShader.setFloat3(uniformName + ".color", lightArray[i].color[0], lightArray[i].color[1], lightArray[i].color[2]); // For some reason red
+            regularShader.setFloat(uniformName + ".strength", lightArray[i].strength);
         }
     }
 
@@ -148,7 +150,7 @@ void render()
 
     for (unsigned int i = 0; i < objects.size(); i++)
     {
-        if (objects[i].enabled == false || objects[i].visible == false)
+        if (objects[i].enabled == false || objects[i].visible == false || objects[i].objectType != REGULAR)
         {
             continue;
         }
@@ -167,34 +169,13 @@ void render()
         model = glm::rotate(model, glm::radians(angle.y), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, glm::radians(angle.z), glm::vec3(0.0f, 0.0f, 1.0f));
 
-        if (obj.objectType == LIGHT)
-        {
-            lightShader.use();
-            for (int j = 0; j < lightArray.size(); j++) // Ah yes, peak, run a for loop every single frame multiple times, truly the pythonic way.
-            {
-                
-                lightArray[j].color = objects[lightArray[j].id].objectColor;
-                if (lightArray[j].id == obj.id)
-                {
-                    lightShader.setFloat3("lightColor", lightArray[j].color[0], lightArray[j].color[1], lightArray[j].color[2]);
-                    break;
-                }
-            }
-            lightShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
-
-            lightShader.setInt("currentTexture", 1);
-
-        }
-        else
-        {
-            regularShader.use();
-            
-            regularShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
-            regularShader.setBool("selected", obj.selected);
-            regularShader.setInt("currentTexture", 1);
-            regularShader.setFloat3("objectColor", obj.objectColor[0], obj.objectColor[1], obj.objectColor[2]);
-            regularShader.setFloat("reflectancy", obj.reflectance); // Adjust this value as needed
-        }
+        regularShader.use();
+        
+        regularShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
+        regularShader.setBool("selected", obj.selected);
+        regularShader.setInt("currentTexture", 1);
+        regularShader.setFloat3("objectColor", obj.objectColor[0], obj.objectColor[1], obj.objectColor[2]);
+        regularShader.setFloat("reflectancy", obj.reflectance); // Adjust this value as needed
 
         glBindVertexArray(objects[i].VAO);
         
@@ -203,22 +184,6 @@ void render()
             glDrawArrays(GL_TRIANGLES, 0, obj.temp_data.size());
         }
     }
-
-    // Needs to be here for some reason or light vertex shader will stop working?????
-    // Edit: This was so stupid, how did I not know that I needed to set the model, view and proj??? Also, how does this even work, it only runs once per frame????
-    lightShader.use();
-
-    lightShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
-    lightShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
-    lightShader.setMatrix4fv("projection", 1, GL_FALSE, glm::value_ptr(proj));
-
-    regularShader.use();
-
-    regularShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
-    regularShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
-    regularShader.setMatrix4fv("projection", 1, GL_FALSE, glm::value_ptr(proj));
-
-    regularShader.setFloat("ambientStrength", ambientintensity);
 }
 
 void renderLights()
@@ -238,7 +203,7 @@ void renderLights()
     lightShader.setInt("gAlbedo", 7);
     lightShader.setInt("gDepth", 8);
 
-    proj = glm::perspective(glm::radians(fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+    proj = glm::perspective(glm::radians(fov), (float)currentWidth / (float)currentHeight, 0.1f, 1000.0f);
 
     lightShader.use();
     lightShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
@@ -299,45 +264,10 @@ void renderLights()
 
 }
 
-void renderWeapon(int currentWeapon)
-{
-    regularShader.use();
-
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, weapons[currentWeapon].texture + 1); // Need the +1 for whatever reason because its being offseted somewhere somehow
-
-    regularShader.setInt("currentTexture", 2);
-
-    regularShader.setBool("selected", false);
-    regularShader.setFloat3("viewPos", cameraPos.x, cameraPos.y, cameraPos.z);
-    regularShader.setFloat3("objectColor", weapons[currentWeapon].objectColor[0], weapons[currentWeapon].objectColor[1], weapons[currentWeapon].objectColor[2]);
-    regularShader.setFloat("ambientStrength", ambientintensity); // Adjust this value as needed
-    regularShader.setFloat("reflectancy", 0.0f); // Adjust this value as needed
-
-    glBindVertexArray(weapons[currentWeapon].VAO);
-
-    // Transformations
-    weapons[currentWeapon].transform.pos = cameraPos + weapons[currentWeapon].offset.pos;
-    weapons[currentWeapon].transform.rot.y = -yaw;
-    weapons[currentWeapon].transform.rot.z = pitch;
-    model = glm::mat4(1.0f);
-    model = glm::translate(model, cameraPos); // Make it go to camerapos
-    model = glm::scale(model, glm::vec3(weapons[currentWeapon].transform.scale));
-    glm::vec3 angle = weapons[currentWeapon].transform.rot;
-    model = glm::rotate(model, glm::radians(angle.x), glm::vec3(1.0f, 0.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(angle.y), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(angle.z), glm::vec3(0.0f, 0.0f, 1.0f));
-    model = glm::translate(model, weapons[currentWeapon].offset.pos);
-
-    regularShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
-
-    glDrawArrays(GL_TRIANGLES, 0, weapons[currentWeapon].temp_data.size());
-}
-
 void renderGBuffer()
 {
 
-    proj = glm::perspective(glm::radians(fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
+    proj = glm::perspective(glm::radians(fov), (float)currentWidth / (float)currentHeight, 0.1f, 1000.0f);
 
     gBufferShader.use();
     gBufferShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
@@ -378,6 +308,7 @@ void renderGBuffer()
 
 void renderDepth(int currentMap, bool dynamic = false)
 {
+    
     // First pass
     if (dynamic == true)
     {
@@ -424,7 +355,6 @@ void renderDepth(int currentMap, bool dynamic = false)
         
         
         const auto &obj = objects[i];
-        std::cout << obj.name << std::endl;
 
         // Transformations
         model = glm::mat4(1.0f);
@@ -439,8 +369,25 @@ void renderDepth(int currentMap, bool dynamic = false)
         
         glBindVertexArray(objects[i].VAO);
 
+        GLuint query;
+        glGenQueries(1, &query);
+
+        glBeginQuery(GL_TIME_ELAPSED, query);
+
+        // Render your object here (vertex shader executes)
 
         glDrawArrays(GL_TRIANGLES, 0, obj.temp_data.size());
+
+        glEndQuery(GL_TIME_ELAPSED);
+
+        // Retrieve the result
+        GLuint64 elapsedTime;
+        glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsedTime);
+
+        std::cout << "Vertex Shader Execution Time: " << elapsedTime / 1000000.0 << " ms" << std::endl;
+
+        glDeleteQueries(1, &query);
+
     }
 }
 
@@ -503,7 +450,7 @@ void updateStaticShadows()
 
 void updateDynamicShadows()
 {
-    
+    glEnable(GL_CULL_FACE);
     regularShader.use();
 
     regularShader.setFloat("far_plane", far_plane);
@@ -512,6 +459,7 @@ void updateDynamicShadows()
     
     for (int i = 0; i < getShadowAmount(); i++) // 5 is RENDER_MAX_SHADOWS
     {
+
         // Rendering to depth map
         
         glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), (float)SHADOW_RESOLUTION/(float)SHADOW_RESOLUTION, near_plane, far_plane);
@@ -548,12 +496,14 @@ void updateDynamicShadows()
         glBindTexture(GL_TEXTURE_CUBE_MAP, depthDynamicCubeMaps[i]);
 
         renderDepth(i, true);
+
     }
 
     glDisable(GL_CULL_FACE);
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, currentWidth, currentHeight);
+
 }
 
 void createSkybox()
@@ -640,6 +590,10 @@ int getShadowAmount()
         {
             counter++;
         }
+    }
+    if (counter >= RENDER_MAX_SHADOWS)
+    {
+        counter = RENDER_MAX_SHADOWS - 1;
     }
 
     return counter;

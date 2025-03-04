@@ -45,6 +45,8 @@ uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
 
+uniform float tempValue;
+
 float ShadowCalculation(vec3 fragPos, int id)
 {
 
@@ -52,49 +54,53 @@ float ShadowCalculation(vec3 fragPos, int id)
     float currentDepth = length(fragToLight);
     if (currentDepth >= far_plane)
     {
-        return 2.0;
+        return 1.0;
     }
 
     float bias = 0.15f;
     float viewDistance = length(viewPos - fragPos);
 
-    float staticDepth = texture(shadowMap[id], fragToLight).r;
-    staticDepth *= far_plane;
-
     float dynamicDepth = texture(dynamicShadowMap[id], fragToLight).r;
     dynamicDepth *= far_plane;
 
-    float shadowStatic = (currentDepth - bias > staticDepth) ? 1.0 : 0.0;
     float shadowDynamic = (currentDepth - bias > dynamicDepth) ? 1.0 : 0.0;
 
-    float shadow = max(shadowStatic, shadowDynamic);
 
     if (shadowDebug == true)
     {
-        FragColor = vec4(vec3(shadowStatic), 1.0);
+        FragColor = vec4(vec3(shadowDynamic), 1.0);
     }
     
 
-    return shadow;
+    return shadowDynamic;
 }
 
 vec3 calcPointLight(PointLight light, vec3 FragPos, vec3 Normal, vec3 Albedo)
 {
+    
+    float distance = length(light.position - FragPos);
 
-    vec3 lightDir = normalize(light.position - FragPos);
-    vec3 diffuse = max(dot(Normal, lightDir), 0.0) * Albedo * light.color;
+    vec3 diffuse = vec3(0, 0, 0);
+    vec3 specular = vec3(0, 0, 0);
 
     float shininess = 32.0;
-
+    
+    vec3 lightDir = normalize(light.position - FragPos);
     vec3 viewDir = normalize(viewPos - FragPos);
-    vec3 reflectDir = reflect(-lightDir, Normal);
-    vec3 specular = pow(max(dot(viewDir, reflectDir), 0.0), shininess) * light.color;
+    vec3 halfwayDir = normalize(lightDir + viewDir);
 
-    mediump float distance = length(light.position - FragPos);
+    diffuse = max(dot(Normal, lightDir), 0.0) * Albedo * light.color;
+
+    float spec = pow(max(dot(Normal, halfwayDir), 0.0), shininess);
+
+    specular = light.color * spec;
+
     mediump float attenuation = 1.0 / (1.0 + 0.09 * distance + 0.032 * (distance * distance));
 
     diffuse *= attenuation;
     specular *= attenuation;
+
+    
 
     float shadow = 0.0f;
 
@@ -107,6 +113,7 @@ vec3 calcPointLight(PointLight light, vec3 FragPos, vec3 Normal, vec3 Albedo)
     }
     
     return (1.0 - shadow) * (diffuse + specular) * objectColor;
+    
 }
 
 void main()
@@ -136,7 +143,9 @@ void main()
         vec3 R = reflect(I, normalize(Normal));
 
         FragColor = (vec4(result, 1.0)) * (vec4(texture(skybox, R).rgb, 1.0f));
-
+        //vec3 fragToLight = FragPos - lightPos[1];
+        //float currentDepth = length(fragToLight);
+        //FragColor = vec4(vec3(currentDepth / far_plane), 1.0);
     }
 
     if (selected == true)

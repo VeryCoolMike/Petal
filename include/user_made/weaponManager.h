@@ -41,8 +41,6 @@ void fireWeapon(bool debug)
             float offsetX = ((rand() % (int)(((currentWeapon.spread*200.0f)+1.0f) - (currentWeapon.spread*100.0f)) / 100.0f)) - currentWeapon.spread / 2.0f;
             float offsetY = ((rand() % (int)(((currentWeapon.spread*200.0f)+1.0f) - (currentWeapon.spread*100.0f)) / 100.0f)) - currentWeapon.spread / 2.0f;
 
-            std::cout << offsetX << " - " << offsetY << std::endl;
-
             // Change yaw and pitch and then recalculate instead of this
             glm::vec3 directionTemp;
             directionTemp.x = cos(glm::radians(yaw+offsetX)) * cos(glm::radians(pitch+offsetY));
@@ -54,23 +52,18 @@ void fireWeapon(bool debug)
 
             if (gunRay.valid == true)
             {
-                std::cout << "Valid! Hit: " << gunRay.hit.name << std::endl;
                 if (debug == true)
                 {
                     float random0 = (rand() % 101) / 100.0f;
                     float random1 = (rand() % 101) / 100.0f;
                     float random2 = (rand() % 101) / 100.0f;
-                    addObject(currentIDNumber, "test", cubeObj, LIGHT);
+                    object("test", cubeObj, LIGHT);
                     objects.back().transform.scale = glm::vec3(0.1f, 0.1f, 0.1f);
                     objects.back().transform.pos = gunRay.pos;
                     objects.back().objectColor = glm::vec3(random0, random1, random2);
 
                     lightArray.back().strength = 0.1f;
                 }
-            }
-            else
-            {
-                std::cout << "Invalid!" << std::endl;
             }
         }
     }
@@ -80,13 +73,14 @@ void fireWeapon(bool debug)
 
         if (gunRay.valid == true)
         {
-            std::cout << "Valid! Hit: " << gunRay.hit.name << std::endl;
+            std::cout << "Valid! Hit: " << objects[gunRay.hit].name << std::endl;
             if (debug == true)
             {
                 float random0 = (rand() % 101) / 100.0f;
                 float random1 = (rand() % 101) / 100.0f;
                 float random2 = (rand() % 101) / 100.0f;
-                addObject(currentIDNumber, "test", cubeObj, LIGHT);
+
+                object("test", cubeObj, LIGHT);
                 objects.back().transform.scale = glm::vec3(0.1f, 0.1f, 0.1f);
                 objects.back().transform.pos = gunRay.pos;
                 objects.back().objectColor = glm::vec3(1.0f, 1.0f, 1.0f);

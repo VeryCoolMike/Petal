@@ -1,5 +1,5 @@
 CC = clang
-CFLAGS = -I./include -I./glad/include -I./include/imgui -I./include/imgui/backends
+CFLAGS = -I./include -I./glad/include -I./include/imgui -I./include/imgui/backends -I./include/sol2
 LDFLAGS = -lglfw -lm -lstdc++ -llua
 SRC = main.cpp glad/src/glad.c include/imgui/imgui.cpp include/imgui/imgui_draw.cpp include/imgui/imgui_tables.cpp include/imgui/imgui_widgets.cpp include/imgui/backends/imgui_impl_glfw.cpp include/imgui/backends/imgui_impl_opengl3.cpp
 OBJ = main.o glad.o imgui.o imgui_draw.o imgui_tables.o imgui_widgets.o imgui_impl_glfw.o imgui_impl_opengl3.o
