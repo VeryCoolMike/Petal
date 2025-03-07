@@ -22,7 +22,7 @@ float quadVertices[] = {
     1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
 };
 
-unsigned int quadVAO, quadVBO;
+extern unsigned int quadVAO, quadVBO;
 
 int currentIDNumber = 0;
 int currentLightID = 0;
@@ -93,7 +93,7 @@ void SaveToFile(const std::string &filename)
         outfile << obj.objectColor[0] << "\n"
                 << obj.objectColor[1] << "\n"
                 << obj.objectColor[2] << "\n"; // Lights colors!!!!
-        outfile << obj.texture_name << "\n";        // Textures
+        outfile << obj.textureName << "\n";        // Textures
         outfile << obj.transform.pos.x << "\n"
                 << obj.transform.pos.y << "\n"
                 << obj.transform.pos.z << "\n"; // Position things! >:3
@@ -459,7 +459,7 @@ int LoadFromFile(const std::string &filename) // Load a map from a text file
                 objects.back().transform.pos = tempTransformPos;
                 objects.back().transform.scale = tempTransformScale;
                 objects.back().transform.rot = tempTransformRot;
-                objects.back().texture_name = tempTexture;
+                objects.back().textureName = tempTexture;
 
                 if (objects.back().objectType == LIGHT) // This can't be applied to everything or else lights break for some reason???
                 {

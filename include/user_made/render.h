@@ -23,7 +23,6 @@
 // TEXTURE24-30 = STATIC SHADOWS
 // TEXTURE31 = TEXTURE COLOUR BUFFER
 
-
 float ambientintensity = 0.0f;
 
 GLfloat backgroundColor[4] = {0.2f, 0.3f, 0.3f, 1.0f};
@@ -31,6 +30,8 @@ GLfloat backgroundColor[4] = {0.2f, 0.3f, 0.3f, 1.0f};
 glm::mat4 proj;
 extern glm::mat4 view;
 glm::mat4 model;
+
+extern unsigned int quadVAO, quadVBO;
 
 unsigned int skyboxVAO;
 unsigned int skyboxVBO;
@@ -40,7 +41,7 @@ extern unsigned int framebuffer;
 extern unsigned int rbo;
 
 extern unsigned int gBuffer;
-extern unsigned int gPosition, gNormal, gAlbedo;
+extern unsigned int gPosition, gNormal, gAlbedo, gMaterial;
 extern unsigned int grbo;
 
 const unsigned int RENDER_MAX_SHADOWS = 6;
@@ -83,6 +84,7 @@ extern Shader screenShader;
 extern Shader depthShader;
 extern Shader skyboxShader;
 extern Shader gBufferShader;
+extern Shader billboardShader;
 
 
 // Camera
@@ -110,20 +112,21 @@ void render()
     glActiveTexture(GL_TEXTURE7);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
     glActiveTexture(GL_TEXTURE8);
+    glBindTexture(GL_TEXTURE_2D, gMaterial);
+    glActiveTexture(GL_TEXTURE9);
     glBindTexture(GL_TEXTURE_2D, grbo);
 
     regularShader.setInt("gPosition", 5);
     regularShader.setInt("gNormal", 6);
     regularShader.setInt("gAlbedo", 7);
-    regularShader.setInt("gDepth", 8);
+    regularShader.setInt("gMaterial", 8);
+    regularShader.setInt("gDepth", 9);
 
     proj = glm::perspective(glm::radians(fov), (float)currentWidth / (float)currentHeight, 0.1f, 1000.0f);
 
-    regularShader.use();
     regularShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
     regularShader.setMatrix4fv("projection", 1, GL_FALSE, glm::value_ptr(proj));
 
-    regularShader.setFloat("tempValue", tempValue);
 
     for (int i = 0; i < lightArray.size(); i++) // Ah yes, peak, run a for loop every single frame multiple times, truly the pythonic way.
     {
@@ -141,7 +144,6 @@ void render()
     }
 
     regularShader.setBool("shadowsEnabled", shadowsEnabled);
-    regularShader.setBool("shadowDebug", shadowDebug);
 
     regularShader.setInt("lightAmount", lightArray.size()); // Me when no access to regular shader :moyai:
     regularShader.setFloat("ambientStrength", ambientintensity);
@@ -158,24 +160,12 @@ void render()
 
         // Textures
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, textureArray[findTextureByName(obj.texture_name)].id);
+        glBindTexture(GL_TEXTURE_2D, textureArray[findTextureByName(obj.textureName)].id);
 
-        // Transformations
-        model = glm::mat4(1.0f);
-        model = glm::translate(model, obj.transform.pos);
-        model = glm::scale(model, glm::vec3(obj.transform.scale));
-        glm::vec3 angle = obj.transform.rot;
-        model = glm::rotate(model, glm::radians(angle.x), glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(angle.y), glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(angle.z), glm::vec3(0.0f, 0.0f, 1.0f));
-
-        regularShader.use();
-        
-        regularShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
         regularShader.setBool("selected", obj.selected);
         regularShader.setInt("currentTexture", 1);
-        regularShader.setFloat3("objectColor", obj.objectColor[0], obj.objectColor[1], obj.objectColor[2]);
-        regularShader.setFloat("reflectancy", obj.reflectance); // Adjust this value as needed
+        regularShader.setFloat("reflectancy", obj.reflectance);
+        regularShader.setFloat("tempValue", obj.id / 10.0f);
 
         glBindVertexArray(objects[i].VAO);
         
@@ -186,7 +176,7 @@ void render()
     }
 }
 
-void renderLights()
+void renderOverlay()
 {
     lightShader.use();
     glActiveTexture(GL_TEXTURE5);
@@ -210,7 +200,7 @@ void renderLights()
 
     for (unsigned int i = 0; i < objects.size(); i++)
     {
-        if (objects[i].enabled == false || objects[i].visible == false || objects[i].objectType != LIGHT)
+        if (objects[i].enabled == false)
         {
             continue;
         }
@@ -218,7 +208,7 @@ void renderLights()
 
         // Textures
         glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, textureArray[findTextureByName(obj.texture_name)].id);
+        glBindTexture(GL_TEXTURE_2D, textureArray[findTextureByName(obj.textureName)].id);
 
         // Transformations
         model = glm::mat4(1.0f);
@@ -228,7 +218,6 @@ void renderLights()
         model = glm::rotate(model, glm::radians(angle.x), glm::vec3(1.0f, 0.0f, 0.0f));
         model = glm::rotate(model, glm::radians(angle.y), glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, glm::radians(angle.z), glm::vec3(0.0f, 0.0f, 1.0f));
-
 
         lightShader.use();
 
@@ -247,13 +236,55 @@ void renderLights()
         lightShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
         lightShader.setMatrix4fv("projection", 1, GL_FALSE, glm::value_ptr(proj));
 
-        lightShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
-
         lightShader.setInt("currentTexture", 1);
 
         glBindVertexArray(objects[i].VAO);
+        
+        if (obj.objectType != REGULAR && obj.visible == true)
+        {
+            glDrawArrays(GL_TRIANGLES, 0, obj.temp_data.size());
+        }
+        glDisable(GL_DEPTH_TEST);
+        if (obj.iconTextureName != "NULL")
+        {
+            billboardShader.use();
 
-        glDrawArrays(GL_TRIANGLES, 0, obj.temp_data.size());
+            model = glm::mat4(1.0f);
+            model = glm::translate(model, obj.transform.pos);
+
+            glm::vec3 cameraRight = glm::vec3(view[0][0], view[1][0], view[2][0]);
+            glm::vec3 cameraUp = glm::vec3(view[0][1], view[1][1], view[2][1]);
+            glm::vec3 cameraForward = glm::vec3(view[0][2], view[1][2], view[2][2]);
+
+            glm::mat4 rotation = glm::mat4(1.0f);
+            rotation[0] = glm::vec4(cameraRight, 0.0f);
+            rotation[1] = glm::vec4(cameraUp, 0.0f);
+            rotation[2] = glm::vec4(-cameraFront, 0.0f);
+            model *= rotation;
+
+            billboardShader.setMatrix4fv("model", 1, GL_FALSE, glm::value_ptr(model));
+            billboardShader.setMatrix4fv("view", 1, GL_FALSE, glm::value_ptr(view));
+            billboardShader.setMatrix4fv("projection", 1, GL_FALSE, glm::value_ptr(proj));
+
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, textureArray[findTextureByName(obj.iconTextureName)].id);
+
+            billboardShader.setInt("currentTexture", 2);
+
+            if (obj.objectType == LIGHT)
+            {
+                billboardShader.setFloat3("colour", obj.objectColor[0], obj.objectColor[1], obj.objectColor[2]);
+            }
+            else
+            {
+                billboardShader.setFloat3("colour", 1.0f, 1.0f, 1.0f);
+            }
+
+            glBindVertexArray(quadVAO);
+            glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+        }
+        glEnable(GL_DEPTH_TEST);
+        
     }
 
     // Needs to be here for some reason or light vertex shader will stop working?????
@@ -282,11 +313,15 @@ void renderGBuffer()
         const auto &obj = objects[i];
 
         glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, textureArray[findTextureByName(obj.texture_name)].id);
+        glBindTexture(GL_TEXTURE_2D, textureArray[findTextureByName(obj.textureName)].id);
 
         gBufferShader.setInt("albedoTexture", 4);
 
+        gBufferShader.setFloat3("objectColor", obj.objectColor[0], obj.objectColor[1], obj.objectColor[2]);
+        gBufferShader.setFloat("reflectancy", obj.reflectance);
+
         glBindVertexArray(objects[i].VAO);
+
 
         // Transformations
         model = glm::mat4(1.0f);
@@ -308,7 +343,6 @@ void renderGBuffer()
 
 void renderDepth(int currentMap, bool dynamic = false)
 {
-    
     // First pass
     if (dynamic == true)
     {
@@ -320,7 +354,7 @@ void renderDepth(int currentMap, bool dynamic = false)
     }
     
     glEnable(GL_DEPTH_TEST);
-    glClearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], backgroundColor[3]);
+    glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the buffers
 
     proj = glm::perspective(glm::radians(fov), (float)SHADOW_RESOLUTION / (float)SHADOW_RESOLUTION, 0.1f, 1000.0f);
@@ -369,24 +403,8 @@ void renderDepth(int currentMap, bool dynamic = false)
         
         glBindVertexArray(objects[i].VAO);
 
-        GLuint query;
-        glGenQueries(1, &query);
-
-        glBeginQuery(GL_TIME_ELAPSED, query);
-
-        // Render your object here (vertex shader executes)
-
         glDrawArrays(GL_TRIANGLES, 0, obj.temp_data.size());
 
-        glEndQuery(GL_TIME_ELAPSED);
-
-        // Retrieve the result
-        GLuint64 elapsedTime;
-        glGetQueryObjectui64v(query, GL_QUERY_RESULT, &elapsedTime);
-
-        std::cout << "Vertex Shader Execution Time: " << elapsedTime / 1000000.0 << " ms" << std::endl;
-
-        glDeleteQueries(1, &query);
 
     }
 }

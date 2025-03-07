@@ -31,10 +31,8 @@ uniform vec3 objectColor;
 uniform float ambientStrength;
 uniform vec3 viewPos;
 uniform bool selected;
-uniform float reflectancy;
 uniform float far_plane;
 uniform bool shadowsEnabled;
-uniform bool shadowDebug;
 uniform int screenX;
 uniform int screenY;
 
@@ -44,8 +42,9 @@ uniform PointLight pointLights[MAX_LIGHTS];
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
+uniform sampler2D gMaterial;
 
-uniform float tempValue;
+in float tempValue;
 
 float ShadowCalculation(vec3 fragPos, int id)
 {
@@ -63,14 +62,7 @@ float ShadowCalculation(vec3 fragPos, int id)
     float dynamicDepth = texture(dynamicShadowMap[id], fragToLight).r;
     dynamicDepth *= far_plane;
 
-    float shadowDynamic = (currentDepth - bias > dynamicDepth) ? 1.0 : 0.0;
-
-
-    if (shadowDebug == true)
-    {
-        FragColor = vec4(vec3(shadowDynamic), 1.0);
-    }
-    
+    float shadowDynamic = (currentDepth - bias > dynamicDepth) ? 1.0 : 0.0;    
 
     return shadowDynamic;
 }
@@ -100,8 +92,6 @@ vec3 calcPointLight(PointLight light, vec3 FragPos, vec3 Normal, vec3 Albedo)
     diffuse *= attenuation;
     specular *= attenuation;
 
-    
-
     float shadow = 0.0f;
 
     if (shadowsEnabled == true)
@@ -112,8 +102,7 @@ vec3 calcPointLight(PointLight light, vec3 FragPos, vec3 Normal, vec3 Albedo)
         }
     }
     
-    return (1.0 - shadow) * (diffuse + specular) * objectColor;
-    
+    return (1.0 - shadow) * (diffuse + specular);
 }
 
 void main()
@@ -122,6 +111,7 @@ void main()
     vec3 FragPos = texture(gPosition, gl_FragCoord.xy / screenSize).rgb;
     vec3 Normal = texture(gNormal, gl_FragCoord.xy / screenSize).rgb;
     vec3 Albedo = texture(gAlbedo, gl_FragCoord.xy / screenSize).rgb;
+    vec4 Material = texture(gMaterial, gl_FragCoord.xy / screenSize);
     
     vec3 viewDir = normalize(viewPos - FragPos);
 
@@ -135,18 +125,20 @@ void main()
         }
     }
 
+    float reflectancy = Material.r;
 
-    if (shadowDebug == false)
-    {
+    vec3 I = normalize(FragPos - viewPos) * reflectancy;
+    vec3 R = reflect(I, normalize(Normal));
 
-        vec3 I = normalize(FragPos - viewPos) * reflectancy;
-        vec3 R = reflect(I, normalize(Normal));
+    //FragColor = (vec4(texture(skybox, R).rgb, 1.0f));
 
-        FragColor = (vec4(result, 1.0)) * (vec4(texture(skybox, R).rgb, 1.0f));
-        //vec3 fragToLight = FragPos - lightPos[1];
-        //float currentDepth = length(fragToLight);
-        //FragColor = vec4(vec3(currentDepth / far_plane), 1.0);
-    }
+    
+
+    FragColor = (vec4(result, 1.0)) * (vec4(texture(skybox, R).rgb, 1.0f));
+    //vec3 fragToLight = FragPos - lightPos[1];
+    //float currentDepth = length(fragToLight);
+    //FragColor = vec4(vec3(currentDepth / far_plane), 1.0);
+
 
     if (selected == true)
     {

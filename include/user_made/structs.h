@@ -1,6 +1,8 @@
 #ifndef STRUCTS_H
 #define STRUCTS_H
 
+// Oh my flibbity
+
 #include <string.h>
 #include <stdio.h>
 
@@ -47,36 +49,9 @@ enum objectTypes
 {
     REGULAR, // A regular object such as a wall or a floor
     STATIC,  // A static object that is not destroyed/replaced upon load
-    LIGHT    // A light
+    LIGHT,    // A light
+    CAMERA, // A camera object
 };
-
-/*
-struct object
-{
-    int id;
-    std::string name;
-    vertices vertices;
-    struct
-    {
-        glm::vec3 pos = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 rot = glm::vec3(0.0f, 0.0f, 0.0f);
-        glm::vec3 scale = glm::vec3(1.0f, 1.0f, 1.0f);
-    } transform;
-    enum objectTypes objectType;
-    glm::vec3 objectColor = glm::vec3(1.0f, 1.0f, 1.0f);
-    unsigned int shader;
-    std::string texture_name;
-    float reflectance = 0.0f;
-    bool enabled = true; // Not very efficient way of cleaning things up but we won't be deleting too many objects dynamically
-    bool visible = true; // Make the object completely visible or invisible (rendered / not rendered)
-    bool selected = false;
-    bool canCollide = true;
-    bool dynamic = false;
-    std::vector<float> temp_data; // Used for OpenGL to correctly parse my custom way of saving objects
-    unsigned int VAO;
-    unsigned int VBO;
-};
-*/
 
 struct light // This truly is an ECS
 {
@@ -91,6 +66,8 @@ struct light // This truly is an ECS
     bool castShadow = true;
     int shadowID;
 };
+
+
 
 struct transform
 {
@@ -117,7 +94,7 @@ public:
     enum objectTypes objectType;
     glm::vec3 objectColor = glm::vec3(1.0f, 1.0f, 1.0f);
     unsigned int shader;
-    std::string texture_name;
+    std::string textureName;
     float reflectance = 0.0f;
     bool enabled = true; // Not very efficient way of cleaning things up but we won't be deleting too many objects dynamically
     bool visible = true; // Make the object completely visible or invisible (rendered / not rendered)
@@ -127,6 +104,9 @@ public:
     std::vector<float> temp_data; // Used for OpenGL to correctly parse my custom way of saving objects
     unsigned int VAO;
     unsigned int VBO;
+    int parent; // Can't make it object because of things like the workspace
+
+    std::string iconTextureName;
 
     object(std::string nameGiven, vertices vertexDataGiven, enum objectTypes objectTypeGiven)
     {
@@ -137,9 +117,8 @@ public:
         transform.rot = glm::vec3(0.0f, 0.0f, 0.0f);
         transform.scale = glm::vec3(1.0f, 1.0f, 1.0f);
         objectType = objectTypeGiven;
-        texture_name = "placeholder";
-
-        glUseProgram(9);
+        textureName = "placeholder";
+        iconTextureName = "NULL";
 
         unsigned int tempVAO, tempVBO;
         glGenVertexArrays(1, &tempVAO);
@@ -151,21 +130,6 @@ public:
         VAO = tempVAO;
         VBO = tempVBO;
 
-        std::cout << "Creating object: " << nameGiven << std::endl;
-        std::cout << "Internal VAO: " << tempVAO << std::endl;
-        std::cout << "Internal VBO: " << tempVBO << std::endl;
-
-        // Add at beginning of constructor
-        GLint activeTexture, currentProgram, boundVAO;
-        glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTexture);
-        glUseProgram(9);
-        glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
-        glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &boundVAO);
-
-        std::cout << "GL State when creating: " << nameGiven 
-                << " - ActiveTexture: " << activeTexture
-                << " - CurrentProgram: " << currentProgram 
-                << " - BoundVAO: " << boundVAO << std::endl;
 
         std::vector<float> tempTempData = convertGLMToOpenGLFLoat(vertexDataGiven); // Seems correct
 
@@ -184,8 +148,12 @@ public:
         glBindBuffer(GL_ARRAY_BUFFER, 0);
         glBindVertexArray(0);
 
+        // Custom types
         if (objectType == LIGHT)
         {
+            iconTextureName = "light";
+            visible = false;
+
             struct light newLight;
             newLight.pos = transform.pos;
             newLight.id = currentIDNumber;
@@ -193,6 +161,11 @@ public:
 
             lightArray.push_back(newLight);
             currentLightID += 1;
+        }
+        else if (objectType == CAMERA)
+        {
+            visible = false;
+            iconTextureName = "light";
         }
 
         for (int i = 0; i < guisVisible.size(); i++)

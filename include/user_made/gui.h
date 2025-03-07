@@ -5,6 +5,8 @@
 
 #include "shader.h"
 
+int currentGui = -1;
+
 // Extern variables
 extern bool gui_visible;
 
@@ -33,7 +35,7 @@ extern bool shadowsEnabled;
 extern bool shadowDebug;
 extern int SHADOW_RESOLUTION;
 
-extern unsigned int gPosition, gNormal, gAlbedo;
+extern unsigned int gPosition, gNormal, gAlbedo, gMaterial;
 extern unsigned int grbo;
 
 extern bool defferedLight;
@@ -42,6 +44,7 @@ extern unsigned int textureColorbuffer2;
 
 extern float tempValue;
 
+extern int currentWidth, currentHeight;
 
 void createGui(GLFWwindow *window)
 {
@@ -69,19 +72,107 @@ void renderGui(GLFWwindow *window, Shader regularShader)
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2(500, 800));
+        ImGui::SetNextWindowPos(ImVec2(0, currentHeight*0.85));
+        ImGui::SetNextWindowSize(ImVec2(currentWidth, currentHeight*0.15));
 
-        ImGui::Begin("Control Panel", nullptr,
-                     ImGuiWindowFlags_NoResize |
+        ImGui::Begin("Output", nullptr,
                          ImGuiWindowFlags_NoMove |
                          ImGuiWindowFlags_NoCollapse);
 
-        ImGui::SliderFloat("FOV", &fov, 1.0f, 120.0f);
-        ImGui::Text("Camera Position: %.1f, %.1f, %.1f",
-                    cameraPos.x, cameraPos.y, cameraPos.z);
+        ImGui::End();
 
-        ImGui::Text("FPS: %f", lastFPS);
+
+
+        ImGui::SetNextWindowPos(ImVec2(0, 0));
+        ImGui::SetNextWindowSize(ImVec2(currentWidth, currentHeight*0.15));
+
+        ImGui::Begin("Settings", nullptr,
+                         ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoCollapse);
+
+        ImGui::PlotLines(" ", frameTimes.data(), frameTimes.size(), 0, nullptr, 0.0f, *std::max_element(frameTimes.begin(), frameTimes.end()), ImVec2(currentWidth*0.1, currentHeight*0.1));
+
+        float bufferX = currentWidth*0.1;
+        float bufferY = currentHeight*0.1;
+
+        ImGui::SameLine();
+
+        ImGui::Image((ImTextureID)(uint64_t)gPosition, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::SameLine();
+        ImGui::Image((ImTextureID)(uint64_t)gNormal, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::SameLine();
+        ImGui::Image((ImTextureID)(uint64_t)gAlbedo, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::SameLine();
+        ImGui::Image((ImTextureID)(uint64_t)gMaterial, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::SameLine();
+        ImGui::Image((ImTextureID)(uint64_t)textureColorbuffer, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
+        ImGui::SameLine();
+        ImGui::Image((ImTextureID)(uint64_t)textureColorbuffer2, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
+
+        ImGui::End();
+
+
+        ImGui::SetNextWindowPos(ImVec2(currentWidth*0.75, currentHeight*0.15));
+        ImGui::SetNextWindowSize(ImVec2(currentWidth*0.25, currentHeight*0.7));
+
+        ImGui::Begin("Properties", nullptr,
+                         ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoCollapse);
+
+        if (currentGui != -1)
+        {
+
+            ImGui::Text("Name: %s", objects[currentGui].name.c_str());
+
+            ImGui::Text("ID: %i", currentGui);
+
+            ImGui::Text("Texture:");
+
+            ImVec2 combo_pos = ImGui::GetCursorScreenPos();
+            if (ImGui::BeginCombo("##combo", ""))
+            {
+                for (int i = 0; i < textureArray.size(); i++)
+                {
+                    bool is_selected = (objects[currentGui].textureName == textureArray[i].name);
+                    if (ImGui::Selectable(textureArray[i].name.c_str(), is_selected))
+                    {
+                        objects[currentGui].textureName = textureArray[i].name;
+                    }
+                    ImGui::SameLine();
+                    ImGui::Image((ImTextureID)(uint64_t)i + 1, ImVec2(32,32)); // Mysteriously magical + 1 for some reason
+                    if (is_selected)
+                    {
+                        ImGui::SetItemDefaultFocus();
+                    }
+                }
+                ImGui::EndCombo();
+            }
+            
+            ImVec2 backup_pos = ImGui::GetCursorScreenPos();
+            ImGuiStyle& style = ImGui::GetStyle();
+            ImGui::SetCursorScreenPos(ImVec2(combo_pos.x + style.FramePadding.x, combo_pos.y));
+            ImGui::Image((ImTextureID)(uint64_t)findTextureByName(objects[currentGui].textureName)+1, ImVec2(32, 32));
+            ImGui::SameLine();
+            ImGui::Text("%s", objects[currentGui].textureName.c_str());
+            ImGui::SetCursorScreenPos(backup_pos);
+
+            ImGui::Checkbox("Visible", &objects[currentGui].visible);
+            ImGui::ColorPicker3("Object Color", glm::value_ptr(objects[currentGui].objectColor));
+            ImGui::InputFloat3("Position", &objects[currentGui].transform.pos.x);
+            ImGui::InputFloat3("Rotation", &objects[currentGui].transform.rot.x);
+            ImGui::InputFloat3("Scale", &objects[currentGui].transform.scale.x);
+            ImGui::InputFloat("Reflectance", &objects[currentGui].reflectance);
+        }
+
+        ImGui::End();
+
+
+        ImGui::SetNextWindowPos(ImVec2(0, currentHeight*0.15));
+        ImGui::SetNextWindowSize(ImVec2(currentWidth*0.25, currentHeight*0.7));
+
+        ImGui::Begin("Object Browser", nullptr,
+                         ImGuiWindowFlags_NoMove |
+                         ImGuiWindowFlags_NoCollapse);
 
         static char mapFileName[128] = "MapFile1.txt";
 
@@ -110,7 +201,6 @@ void renderGui(GLFWwindow *window, Shader regularShader)
                 guisVisible.push_back(newGui);
             }
 
-            updateStaticShadows();
         }
 
 
@@ -128,47 +218,13 @@ void renderGui(GLFWwindow *window, Shader regularShader)
         ImGui::InputFloat("Camera Speed", &real_camera_speed, 0.1f);
 
         ImGui::InputFloat("Ambient Strength", &ambientintensity, 0.05f);
-        ImGui::ColorPicker4("Background Color", backgroundColor);
         ImGui::InputInt("Current Shader", &currentShader);
-
-        ImGui::InputFloat("Temp Value", &tempValue);
-
-        ImGui::PlotLines("Frame time graph", frameTimes.data(), frameTimes.size(), 0, nullptr, 0.0f, *std::max_element(frameTimes.begin(), frameTimes.end()), ImVec2(200,100));
 
         ImGui::Text("DEBUG");
 
-        float bufferX = 500.0f;
-        float bufferY = 281.25f;
-
-        ImGui::Image((ImTextureID)(uint64_t)gPosition, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
-        ImGui::Image((ImTextureID)(uint64_t)gNormal, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
-        ImGui::Image((ImTextureID)(uint64_t)gAlbedo, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
-        ImGui::Image((ImTextureID)(uint64_t)textureColorbuffer, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
-        ImGui::Image((ImTextureID)(uint64_t)textureColorbuffer2, ImVec2(bufferX, bufferY), ImVec2(0, 1), ImVec2(1, 0));
-
-        for (int i = 0; i < getShadowAmount(); i++)
-        {
-            if (i % 3 == 0)
-            {
-                ImGui::NewLine();
-            }
-            else
-            {
-                ImGui::SameLine();
-            }
-            glBindFramebuffer(GL_FRAMEBUFFER, depthMapFBOs[i]);
-            ImGui::Image((ImTextureID)(uint64_t)depthCubeMaps[i], ImVec2(bufferX/4, bufferY/4), ImVec2(0, 1), ImVec2(1, 0));
-            glBindFramebuffer(GL_FRAMEBUFFER, 0);   
-        }
-
-    
-        if (ImGui::Button("Refresh static shadows"))
-        {
-            updateStaticShadows();
-        }
+        
 
         ImGui::Checkbox("Shadows enabled", &shadowsEnabled);
-        //ImGui::InputInt("Shadow resolution", &SHADOW_RESOLUTION);
         ImGui::Checkbox("Shadow debug", &shadowDebug);
 
         ImGui::NewLine();
@@ -186,6 +242,7 @@ void renderGui(GLFWwindow *window, Shader regularShader)
 
             if (ImGui::Button(text.c_str()))
             {
+                /*
                 {
                     for (int v = 0; v < guisVisible.size(); v++)
                     {
@@ -206,6 +263,8 @@ void renderGui(GLFWwindow *window, Shader regularShader)
                         }
                     }
                 }
+                */
+               currentGui = n;
             }
 
             ImGui::PopID(); // Pop the ID after the widget
@@ -245,7 +304,7 @@ void renderGui(GLFWwindow *window, Shader regularShader)
                     if (ImGui::ImageButton("##texture1", (ImTextureID)(uint64_t)textureArray[v].id, ImVec2(32, 32), ImVec2(0, 0))) // 0 for no padding
                     {
                         std::cout << "Texture is: " << v << " Name is: " << textureArray[v].name << std::endl;
-                        objects[i].texture_name = textureArray[v].name; // NOT WORK guisVisible[i].id WRONG
+                        objects[i].textureName = textureArray[v].name; // NOT WORK guisVisible[i].id WRONG
                         
                     }
                     if (v % 10 != 0 || v == 0)

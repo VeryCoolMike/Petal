@@ -465,7 +465,7 @@ void registerLuaFunctions(sol::state &lua)
         "name", &object::name,
         "vertices", &object::vertices,
         "objectColor", &object::objectColor,
-        "texture_name", &object::texture_name,
+        "textureName", &object::textureName,
         "reflectance", &object::reflectance,
         "visible", &object::visible,
         "canCollide", &object::canCollide,

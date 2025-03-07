@@ -93,7 +93,7 @@ extern unsigned int textureColorbuffer2;
 extern unsigned int framebuffer2;
 extern unsigned int rbo2;
 extern unsigned int gBuffer;
-extern unsigned int gPosition, gNormal, gAlbedo;
+extern unsigned int gPosition, gNormal, gAlbedo, gMaterial;
 extern unsigned int grbo;
 
 extern int currentWidth;
@@ -256,7 +256,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
 
-    // Colour + Specular
+        // Albedo
     glGenTextures(1, &gAlbedo);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -264,8 +264,17 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo, 0);
 
-    unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-    glDrawBuffers(3, attachments);
+    // Reflectancy, ???, ???, ??? (spares for specular, roughness or smth)
+    glGenTextures(1, &gMaterial);
+    glBindTexture(GL_TEXTURE_2D, gMaterial);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_FLOAT, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, gMaterial, 0);
+
+    unsigned int attachments[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+    glDrawBuffers(4, attachments);
+
 
     glGenRenderbuffers(1, &grbo);
     glBindRenderbuffer(GL_RENDERBUFFER, grbo);

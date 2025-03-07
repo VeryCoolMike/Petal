@@ -35,5 +35,3 @@ imgui_impl_opengl3.o: include/imgui/backends/imgui_impl_opengl3.cpp
 
 clean:
 	rm -f $(OUT)
-
-

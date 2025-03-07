@@ -86,7 +86,7 @@ unsigned int framebuffer2;
 unsigned int rbo2;
 
 unsigned int gBuffer;
-unsigned int gPosition, gNormal, gAlbedo;
+unsigned int gPosition, gNormal, gAlbedo, gMaterial;
 unsigned int grbo;
 
 const unsigned int MAX_SHADOWS = 6;
@@ -115,13 +115,12 @@ int shadowDepthCounter = 0;
 
 int frameCount = 0;
 
-bool defferedLight;
-
-bool rayTracedShadows = false; // 👀 nah jk lol im never adding this raytracing more like stupidfacing 
 
 std::vector<float> frameTimes;
 
 std::vector<char> currentKeysPressed;
+
+unsigned int quadVAO, quadVBO;
 
 // Shaders
 Shader lightShader;
@@ -130,6 +129,7 @@ Shader screenShader;
 Shader depthShader;
 Shader skyboxShader;
 Shader gBufferShader;
+Shader billboardShader;
 
 // Camera stuff
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
@@ -193,6 +193,7 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
     depthShader = Shader("shaders/depthShader.vs", "shaders/depthShader.fs", "shaders/depthShader.gs");
     skyboxShader = Shader("shaders/skybox.vs", "shaders/skybox.fs");
     gBufferShader = Shader("shaders/gBuffer.vs", "shaders/gBuffer.fs");
+    billboardShader = Shader("shaders/billboard.vs", "shaders/billboard.fs");
 
     regularShader.use();
 
@@ -253,7 +254,6 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
     // Create weapons
     createWeapon(dbShotgun, "Shotgun", findTextureByName("PAShotgunText"));
     weapons.back().shotgun = false;
-    
 
     // Load skybox
     std::vector<std::string> faces
@@ -282,7 +282,6 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
     createSkybox();
     createGui(window);
 
-
     /*
     ██████  ███████ ███    ██ ██████  ███████ ██████  ██ ███    ██  ██████
     ██   ██ ██      ████   ██ ██   ██ ██      ██   ██ ██ ████   ██ ██
@@ -301,7 +300,6 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
 
     object("light", cubeObj, LIGHT);
     objects.back().transform.pos = glm::vec3(3.0f, 3.0f, 0.0f);
-
 
     // Create the perspective projection
     glm::mat4 proj = glm::perspective(glm::radians(fov), (float)SCR_WIDTH / (float)SCR_HEIGHT, 0.1f, 1000.0f);
@@ -398,7 +396,7 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gNormal, 0);
 
-    // Colour + Specular
+    // Albedo
     glGenTextures(1, &gAlbedo);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
@@ -406,8 +404,16 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D, gAlbedo, 0);
 
-    unsigned int attachments[3] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2 };
-    glDrawBuffers(3, attachments);
+    // Reflectancy, ???, ???, ??? (spares for specular, roughness or smth)
+    glGenTextures(1, &gMaterial);
+    glBindTexture(GL_TEXTURE_2D, gMaterial);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, SCR_WIDTH, SCR_HEIGHT, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D, gMaterial, 0);
+
+    unsigned int attachments[4] = { GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1, GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3 };
+    glDrawBuffers(4, attachments);
 
     glGenRenderbuffers(1, &grbo);
     glBindRenderbuffer(GL_RENDERBUFFER, grbo);
@@ -535,7 +541,6 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
         
         direction.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
         direction.y = sin(glm::radians(pitch));
-        // direction.y = 0.0f;
         direction.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
         cameraFront = glm::normalize(direction);
 
@@ -606,7 +611,7 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
         render();
         
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer2);
-        glClearColor(backgroundColor[0], backgroundColor[1], backgroundColor[2], backgroundColor[3]);
+        glClearColor(0, 0, 0, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // Clear the buffers
         glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, framebuffer2);
@@ -614,21 +619,17 @@ int main(void) // NEXT UP: Figured out what the hell is going on with shadows, s
         glBlitFramebuffer(0, 0, currentWidth, currentHeight, 0, 0, currentWidth, currentHeight, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, framebuffer2);
 
-        renderLights();
         renderSkybox(cubeMapTexture);
-
+        renderOverlay();
 
         // Second pass
-                
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDisable(GL_DEPTH_TEST);
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
 
         screenShader.use();
         screenShader.setInt("shader", currentShader);
-        screenShader.setFloat3("bgColor", backgroundColor[0], backgroundColor[1], backgroundColor[2]);
-        //regularShader.use();
+        screenShader.setFloat3("bgColor", 0, 0, 0);
+
         glBindVertexArray(quadVAO);
         glActiveTexture(GL_TEXTURE31);
         glBindTexture(GL_TEXTURE_2D, textureColorbuffer);

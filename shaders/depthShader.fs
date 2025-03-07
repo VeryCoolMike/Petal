@@ -1,4 +1,4 @@
-#version 330 core
+#version 460 core
 in vec4 FragPos;
 
 #define MAX_SHADOWS 6
