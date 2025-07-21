@@ -1,5 +1,7 @@
 # Project Petal
 
+# This repository has been archived, I made this when I was 13 years old, and it is really bad. It isn't a game engine as it claims, it's more of a glorified rendering engine that has a bad level editor. I may make another (less ambitious) game engine in the future, but this project will no longer be updated.
+
 > Project Petal is a simple game engine using OpenGL and C++
 
 <picture>
